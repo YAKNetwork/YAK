@@ -9,7 +9,7 @@ categories = ["cryptography", "ai"]
 
 
 [workspace]
-members = [
+members = [ "rag",
     "simple-client"
 ]
 resolver = "2"
