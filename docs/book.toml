@@ -1,0 +1,5 @@
+[book]
+authors = ["eig101"]
+language = "en"
+multilingual = false
+src = "src"

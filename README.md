@@ -1,2 +1,3 @@
-# YAK
-An Verifiable Agent Network
+# YAK: Your Autonomous Knowledgebase
+
+An Privacy-preserving Agent Network
