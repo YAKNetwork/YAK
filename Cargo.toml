@@ -10,6 +10,7 @@ categories = ["cryptography", "ai"]
 [workspace]
 members = [
     "crates/private-emb",
+    "examples/rag",
     "examples/simple-client",
 ]
 resolver = "2"
@@ -27,8 +28,7 @@ debug-assertions = true
 
 
 [workspace.dependencies]
-rig-core = { git = "https://github.com/YAKNetwork/rig" }
-
+rig-core = { git = "https://github.com/YAKNetwork/rig", branch = "yak-dev" }
 
 #[workspace.dev-dependencies]
 anyhow = "1.0.75"

@@ -1,16 +1,10 @@
-use std::env;
-
-use rig::{agent::AgentBuilder, completion::Prompt, providers::cohere};
+use rig::{agent::AgentBuilder, completion::Prompt, providers::doubao::{self, DOUBAO_PRO_32K}};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // Create OpenAI and Cohere clients
-    // let openai_client = openai::Client::new(&env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set"));
-    let cohere_client =
-        cohere::Client::new(&env::var("COHERE_API_KEY").expect("COHERE_API_KEY not set"));
-
-    // let model = openai_client.completion_model("gpt-4");
-    let model = cohere_client.completion_model("command-r");
+    // Create Doubao clients
+    let openai_client = doubao::Client::from_env();
+    let model = openai_client.completion_model(DOUBAO_PRO_32K);
 
     // Create an agent with multiple context documents
     let agent = AgentBuilder::new(model)

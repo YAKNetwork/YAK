@@ -27,8 +27,8 @@ debug-assertions = true
 
 
 [workspace.dependencies]
-rig-derive = { git = "https://github.com/YAKNetwork/rig" }
-rig-core = { git = "https://github.com/YAKNetwork/rig" }
+rig-derive = { git = "https://github.com/YAKNetwork/rig", branch = "yak-dev" }
+rig-core = { git = "https://github.com/YAKNetwork/rig", branch = "yak-dev" }
 
 anyhow = "1.0.75"
 assert_fs = "1.1.2"

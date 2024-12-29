@@ -1,0 +1,26 @@
+[package]
+name = "rag"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+rig-core = { workspace = true, features = ["pdf", "derive"] }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
+tracing = "0.1.40"
+futures = "0.3.30"
+
+textwrap = { version = "0.16.1"}
+term_size = { version = "0.3.2"}
+testcontainers = "0.23.1"
+tracing-subscriber = "0.3.18"
+
+[features]
+default = ["rig-core/derive"]
