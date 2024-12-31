@@ -30,7 +30,7 @@ Below we can see what vector embeddings of data objects in a vector space could 
 
 In the following image, you can see the vectors for the words “Wolf” and “Dog” are close to each other because dogs are direct descendants of wolves. Close to the dog, you can see the word “Cat,” which is similar to the word “Dog” because both are animals that are also common pets. But further away, on the right-hand side, you can see words that represent fruit, such as “Apple” or “Banana”, which are close to each other but further away from the animal terms.
 
-![vector-embedding-visualizer](/assets/vector-embedding-visualizer.jpg)
+![vector-embedding-visualizer](./vector-embedding-visualizer.jpg)
 
 
 ## Semantic Search
