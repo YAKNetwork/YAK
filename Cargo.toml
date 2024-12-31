@@ -29,8 +29,6 @@ debug-assertions = true
 
 [workspace.dependencies]
 rig-core = { git = "https://github.com/YAKNetwork/rig" }
-rig-neo4j = { git = "https://github.com/YAKNetwork/rig" }
-
 
 #[workspace.dev-dependencies]
 anyhow = "1.0.75"

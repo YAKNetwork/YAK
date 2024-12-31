@@ -4,5 +4,8 @@
     - [Installation](./introduction/installation.md)
 
 - [Vector Embedding](./embedding/vector-embedding.md)
-    - [Distance Preserving](./embedding/distance-preserving.md)
+    - [Distance Preserving Encryption](./embedding/distance-preserving.md)
+
+- [Developer Tutorial]
+    - [API]()
 

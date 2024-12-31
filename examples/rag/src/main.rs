@@ -1,148 +1,117 @@
-//! Simple end-to-end example of the vector search capabilities of the `rig-neo4j` crate.
-//! This example expects a running Neo4j instance running.
-//! It:
-//! 1. Generates embeddings for a set of 3 "documents"
-//! 2. Adds the documents to the Neo4j DB
-//! 3. Creates a vector index on the embeddings
-//! 4. Queries the vector index
-//! 5. Returns the results
-use std::env;
-
-use futures::{StreamExt, TryStreamExt};
+use anyhow::{Context, Result};
 use rig::{
     embeddings::EmbeddingsBuilder,
-    providers::openai::{Client, TEXT_EMBEDDING_ADA_002},
-    vector_store::VectorStoreIndex as _,
+    loaders::PdfFileLoader,
+    providers::openai::{self, TEXT_EMBEDDING_ADA_002},
+    vector_store::in_memory_store::InMemoryVectorStore,
     Embed,
 };
-use rig_neo4j::{vector_index::SearchParams, Neo4jClient, ToBoltType};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
-#[derive(Embed, Clone, Debug)]
-pub struct Word {
-    pub id: String,
+#[derive(Embed, Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+struct Document {
+    id: String,
     #[embed]
-    pub definition: String,
+    content: String,
+}
+
+fn load_pdf(path: PathBuf) -> Result<Vec<String>> {
+    let mut chunks = Vec::new();
+    let mut current_chunk = String::new();
+    let chunk_size = 2000; // Approximately 2000 characters per chunk
+
+    for entry in PdfFileLoader::with_glob(path.to_str().unwrap())?.read() {
+        let content = entry?;
+
+        // Split content into words
+        let words: Vec<&str> = content.split_whitespace().collect();
+
+        for word in words {
+            if current_chunk.len() + word.len() + 1 > chunk_size {
+                // If adding the next word would exceed chunk size,
+                // save current chunk and start a new one
+                if !current_chunk.is_empty() {
+                    chunks.push(current_chunk.trim().to_string());
+                    current_chunk.clear();
+                }
+            }
+            current_chunk.push_str(word);
+            current_chunk.push(' ');
+        }
+    }
+
+    // last chunk
+    if !current_chunk.is_empty() {
+        chunks.push(current_chunk.trim().to_string());
+    }
+
+    if chunks.is_empty() {
+        anyhow::bail!("No content found in PDF file: {:?}", path);
+    }
+
+    Ok(chunks)
 }
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() -> Result<()> {
     // Initialize OpenAI client
-    let openai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
-    let openai_client = Client::new(&openai_api_key);
+    let openai_client = openai::Client::from_env();
 
-    // Initialize Neo4j client
-    let neo4j_uri = env::var("NEO4J_URI").expect("NEO4J_URI not set");
-    let neo4j_username = env::var("NEO4J_USERNAME").expect("NEO4J_USERNAME not set");
-    let neo4j_password = env::var("NEO4J_PASSWORD").expect("NEO4J_PASSWORD not set");
+    // Load PDFs using Rig's built-in PDF loader
+    let documents_dir = std::env::current_dir()?.join("documents");
 
-    let neo4j_client = Neo4jClient::connect(&neo4j_uri, &neo4j_username, &neo4j_password).await?;
+    let moores_law_chunks = load_pdf(documents_dir.join("Moores_Law_for_Everything.pdf"))
+        .context("Failed to load Moores_Law_for_Everything.pdf")?;
+    let last_question_chunks = load_pdf(documents_dir.join("The_Last_Question.pdf"))
+        .context("Failed to load The_Last_Question.pdf")?;
 
-    // Select the embedding model and generate our embeddings
+    println!("Successfully loaded and chunked PDF documents");
+
+    // Create embedding model
     let model = openai_client.embedding_model(TEXT_EMBEDDING_ADA_002);
 
-    let embeddings = EmbeddingsBuilder::new(model.clone())
-        .document(Word {
-            id: "doc0".to_string(),
-            definition: "Definition of a *flurbo*: A flurbo is a green alien that lives on cold planets".to_string(),
-        })?
-        .document(Word {
-            id: "doc1".to_string(),
-            definition: "Definition of a *glarb-glarb*: A glarb-glarb is a ancient tool used by the ancestors of the inhabitants of planet Jiro to farm the land.".to_string(),
-        })?
-        .document(Word {
-            id: "doc2".to_string(),
-            definition: "Definition of a *linglingdong*: A term used by inhabitants of the far side of the moon to describe humans.".to_string(),
-        })?
-        .build()
-        .await?;
+    // Create embeddings builder
+    let mut builder = EmbeddingsBuilder::new(model.clone());
 
-    futures::stream::iter(embeddings)
-        .map(|(doc, embeddings)| {
-            neo4j_client.graph.run(
-                neo4rs::query(
-                    "
-                        CREATE
-                            (document:DocumentEmbeddings {
-                                id: $id,
-                                document: $document,
-                                embedding: $embedding})
-                        RETURN document",
-                )
-                .param("id", doc.id)
-                // Here we use the first embedding but we could use any of them.
-                // Neo4j only takes primitive types or arrays as properties.
-                .param("embedding", embeddings.first().vec.clone())
-                .param("document", doc.definition.to_bolt_type()),
-            )
-        })
-        .buffer_unordered(3)
-        .try_collect::<Vec<_>>()
-        .await
-        .unwrap();
-
-    // Create a vector index on our vector store
-    println!("Creating vector index...");
-    neo4j_client
-        .graph
-        .run(neo4rs::query(
-            "CREATE VECTOR INDEX vector_index IF NOT EXISTS
-            FOR (m:DocumentEmbeddings)
-            ON m.embedding
-            OPTIONS { indexConfig: {
-                `vector.dimensions`: 1536,
-                `vector.similarity_function`: 'cosine'
-                }}",
-        ))
-        .await?;
-
-    // ℹ️ The index name must be unique among both indexes and constraints.
-    // A newly created index is not immediately available but is created in the background.
-
-    // Check if the index exists with db.awaitIndex(), the call timeouts if the index is not ready
-    let index_exists = neo4j_client
-        .graph
-        .run(neo4rs::query("CALL db.awaitIndex('vector_index')"))
-        .await;
-    if index_exists.is_err() {
-        println!("Index not ready, waiting for index...");
-        std::thread::sleep(std::time::Duration::from_secs(5));
+    // Add chunks from Moore's Law
+    for (i, chunk) in moores_law_chunks.into_iter().enumerate() {
+        builder = builder.document(Document {
+            id: format!("moores_law_{}", i),
+            content: chunk,
+        })?;
     }
 
-    println!("Index exists: {:?}", index_exists);
-
-    // Create a vector index on our vector store
-    // IMPORTANT: Reuse the same model that was used to generate the embeddings
-    let index = neo4j_client
-        .get_index(model, "vector_index", SearchParams::default())
-        .await?;
-
-    // The struct that will reprensent a node in the database. Used to deserialize the results of the query (passed to the `top_n` methods)
-    // ❗IMPORTANT: The field names must match the property names in the database
-    #[derive(serde::Deserialize)]
-    struct Document {
-        #[allow(dead_code)]
-        id: String,
-        document: String,
+    // Add chunks from The Last Question
+    for (i, chunk) in last_question_chunks.into_iter().enumerate() {
+        builder = builder.document(Document {
+            id: format!("last_question_{}", i),
+            content: chunk,
+        })?;
     }
 
-    // Query the index
-    let results = index
-        .top_n::<Document>("What is a glarb?", 1)
-        .await?
-        .into_iter()
-        .map(|(score, id, doc)| (score, id, doc.document))
-        .collect::<Vec<_>>();
+    // Build embeddings
+    let embeddings = builder.build().await?;
 
-    println!("Results: {:?}", results);
+    println!("Successfully generated embeddings");
 
-    let id_results = index
-        .top_n_ids("What is a linglingdong?", 1)
-        .await?
-        .into_iter()
-        .map(|(score, id)| (score, id))
-        .collect::<Vec<_>>();
+    // Create vector store and index
+    let vector_store = InMemoryVectorStore::from_documents(embeddings);
+    let index = vector_store.index(model);
 
-    println!("ID results: {:?}", id_results);
+    println!("Successfully created vector store and index");
+
+    // Create RAG agent
+    let rag_agent = openai_client
+        .agent("gpt-3.4-turbo")
+        .preamble("You are a helpful assistant that answers questions based on the provided document context. When answering questions, try to synthesize information from multiple chunks if they're related.")
+        .dynamic_context(4, index) // Increased to 4 since we have chunks now
+        .build();
+
+    println!("Starting CLI chatbot...");
+
+    // Start interactive CLI
+    rig::cli_chatbot::cli_chatbot(rag_agent).await?;
 
     Ok(())
 }
