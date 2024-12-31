@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
 
     // Create RAG agent
     let rag_agent = openai_client
-        .agent("gpt-3.4-turbo")
+        .agent("gpt-4")
         .preamble("You are a helpful assistant that answers questions based on the provided document context. When answering questions, try to synthesize information from multiple chunks if they're related.")
         .dynamic_context(4, index) // Increased to 4 since we have chunks now
         .build();
